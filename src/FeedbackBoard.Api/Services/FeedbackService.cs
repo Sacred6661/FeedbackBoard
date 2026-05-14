@@ -37,11 +37,13 @@ public class FeedbackService : IFeedbackService
         _logger.LogInformation("Feedback saved to Cosmos DB: {Id}", created?.Id);
 
         // 2. Sending a message to Service Bus
+        _logger.LogInformation("Attempting to send to Service Bus queue: {Queue}", "feedback-submitted");
         await _serviceBus.PublishFeedbackSubmittedAsync(
             created.Id,
             created.Title,
             created.CategoryId,
             created.UserId);
+        _logger.LogInformation("Successfully sent to Service Bus");
 
         _logger.LogInformation("Feedback event published to Service Bus: {Id}", created.Id);
 

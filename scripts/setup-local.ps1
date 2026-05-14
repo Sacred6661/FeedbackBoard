@@ -119,20 +119,25 @@ foreach ($container in $containers) {
 }
 
 # Creating the AuditLogs table
+Write-Host "Creating Table Storage table..." -ForegroundColor Yellow
+$tableHeaders = @{
+    "Content-Type" = "application/json"
+    "Accept" = "application/json"
+}
+
 try {
-    Invoke-RestMethod -Uri "$miniblueEndpoint/feedbackboardstorage/Tables" `
+    Invoke-RestMethod -Uri "$miniblueEndpoint/table/feedbackboardstorage/Tables" `
         -Method POST `
-        -Headers @{
-            "x-ms-version" = "2023-01-01"
-            "x-ms-date" = (Get-Date -Format "R")
-            "Content-Type" = "application/json"
-            "Accept" = "application/json"
-        } `
+        -Headers $tableHeaders `
         -Body '{"TableName": "AuditLogs"}' `
-        -ErrorAction SilentlyContinue | Out-Null
-    Write-Host "      Table 'AuditLogs' created" -ForegroundColor Gray
+        -ErrorAction Stop | Out-Null
+    Write-Host "  Table 'AuditLogs' created" -ForegroundColor Gray
 } catch {
-    Write-Host "      Table 'AuditLogs' - already exists" -ForegroundColor DarkGray
+    if ($_.Exception.Response.StatusCode -eq 409) {
+        Write-Host "  Table 'AuditLogs' already exists" -ForegroundColor DarkGray
+    } else {
+        Write-Host "  WARNING: Could not create table 'AuditLogs'" -ForegroundColor Yellow
+    }
 }
 
 Write-Host "      Storage Account configured!" -ForegroundColor Green
@@ -142,8 +147,8 @@ Write-Host "[3/9] Creating Key Vault..." -ForegroundColor Yellow
 
 $kvSecrets = @(
     @{name="FeedbackBoard--CosmosDb--ConnectionString"; value="AccountEndpoint=https://localhost:8081;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;"},
-    @{name="FeedbackBoard--ServiceBus--ConnectionString"; value="Endpoint=sb://localhost:4566;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=rootkey;UseDevelopmentEmulator=true;"},
-    @{name="FeedbackBoard--Storage--ConnectionString"; value="DefaultEndpointsProtocol=http;AccountName=feedbackboardstorage;AccountKey=$STORAGE_KEY;BlobEndpoint=$miniblueEndpoint/feedbackboardstorage;TableEndpoint=$miniblueEndpoint/feedbackboardstorage;QueueEndpoint=$miniblueEndpoint/feedbackboardstorage;"},
+    @{name="FeedbackBoard--ServiceBus--ConnectionString"; value="Endpoint=sb://localhost:5672;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=RootManageSharedAccessKey;UseDevelopmentEmulator=true;"},
+    @{name="FeedbackBoard--Storage--ConnectionString"; value="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://localhost:10000/devstoreaccount1;TableEndpoint=http://localhost:10002/devstoreaccount1;"},
     @{name="FeedbackBoard--Redis--ConnectionString"; value="localhost:6379"}
 )
 

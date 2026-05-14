@@ -22,6 +22,9 @@ public class HealthController : ControllerBase
         var baseUrl = _configuration["Azure:Endpoint"] ?? "http://localhost:4566";
         var results = new Dictionary<string, string>();
 
+        // local healthcheck, should be changed to allow prod and other env
+        var functionUrlHealt = "http://localhost:7221/api/Health";
+
         // 1. Key Vault
         results["key-vault"] = await CheckUrl(client, $"{baseUrl}/keyvault/feedbackboard-kv/secrets?api-version=7.4");
 
@@ -30,6 +33,9 @@ public class HealthController : ControllerBase
 
         // 3. Cosmos DB
         results["cosmos-db"] = await CheckUrl(client, $"{baseUrl}/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/feedbackboard-rg/providers/Microsoft.DocumentDB/databaseAccounts/feedbackboard-cosmos?api-version=2023-04-15");
+
+        // 4. сheck functions
+        results["azure-functions"] = await CheckUrl(client, functionUrlHealt);
 
         // Configuration source
         var storageConn = _configuration["FeedbackBoard:Storage:ConnectionString"];

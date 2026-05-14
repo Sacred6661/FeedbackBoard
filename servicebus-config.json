@@ -1,0 +1,48 @@
+{
+  "UserConfig": {
+    "Namespaces": [
+      {
+        "Name": "sbemulatorns",
+        "Queues": [
+          {
+            "Name": "feedback-submitted",
+            "Properties": {
+              "MaxDeliveryCount": 10,
+              "MaxSizeInMegabytes": 1024,
+              "DefaultMessageTimeToLive": "PT1H"
+            }
+          },
+          {
+            "Name": "feedback-processed",
+            "Properties": {
+              "MaxDeliveryCount": 10,
+              "MaxSizeInMegabytes": 1024,
+              "DefaultMessageTimeToLive": "PT1H"
+            }
+          }
+        ],
+        "Topics": [
+          {
+            "Name": "feedback-events",
+            "Properties": {
+              "MaxSizeInMegabytes": 1024
+            },
+            "Subscriptions": [
+              {
+                "Name": "analytics-subscription",
+                "Properties": {
+                  "MaxDeliveryCount": 10,
+                  "DefaultMessageTimeToLive": "PT1H"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "Logging": {
+      "Type": "Console",
+      "Level": "Information"
+    }
+  }
+}

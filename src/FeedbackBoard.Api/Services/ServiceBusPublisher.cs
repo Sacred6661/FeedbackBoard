@@ -1,27 +1,35 @@
-﻿using FeedbackBoard.Api.Services.Interfaces;
+﻿using Azure.Messaging.ServiceBus;
+using FeedbackBoard.Api.Services.Interfaces;
 using FeedbackBoard.Core.Events;
 using Newtonsoft.Json;
-using System.Text;
 
 namespace FeedbackBoard.Api.Services;
 
-public class ServiceBusPublisher : IServiceBusPublisher
+public class ServiceBusPublisher : IServiceBusPublisher, IAsyncDisposable
 {
-    private readonly HttpClient _httpClient;
-    private readonly string _queueEndpoint;
+    private readonly ServiceBusClient _client;
+    private readonly ServiceBusSender _sender;
     private readonly ILogger<ServiceBusPublisher> _logger;
 
     public ServiceBusPublisher(IConfiguration configuration, ILogger<ServiceBusPublisher> logger)
     {
         _logger = logger;
 
+        var connectionString = configuration["FeedbackBoard:ServiceBus:ConnectionString"]
+            ?? configuration.GetConnectionString("ServiceBus")
+            ?? throw new InvalidOperationException("Service Bus connection string not found");
+
         var queueName = configuration["ServiceBus:Queues:FeedbackSubmitted"] ?? "feedback-submitted";
-        var endpoint = configuration["Azure:Endpoint"] ?? "http://localhost:4566";
 
-        _queueEndpoint = $"{endpoint}/feedbackboard-sb/queues/{queueName}/messages";
-        _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        var clientOptions = new ServiceBusClientOptions
+        {
+            TransportType = ServiceBusTransportType.AmqpTcp
+        };
 
-        _logger.LogInformation("Service Bus HTTP publisher initialized for: {Endpoint}", _queueEndpoint);
+        _client = new ServiceBusClient(connectionString, clientOptions);
+        _sender = _client.CreateSender(queueName);
+
+        _logger.LogInformation("Service Bus SDK publisher initialized for queue: {Queue}", queueName);
     }
 
     public async Task PublishFeedbackSubmittedAsync(string feedbackId, string title, string categoryId, string userId)
@@ -38,24 +46,27 @@ public class ServiceBusPublisher : IServiceBusPublisher
             };
 
             var json = JsonConvert.SerializeObject(eventData);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            _logger.LogInformation("Sending message to Service Bus via HTTP...");
-
-            var response = await _httpClient.PostAsync(_queueEndpoint, content);
-
-            if (response.IsSuccessStatusCode)
+            var message = new ServiceBusMessage(json)
             {
-                _logger.LogInformation("Message sent to Service Bus: {FeedbackId}", feedbackId);
-            }
-            else
-            {
-                _logger.LogWarning("Service Bus responded with: {StatusCode}", response.StatusCode);
-            }
+                MessageId = feedbackId,
+                ContentType = "application/json",
+                Subject = "FeedbackSubmitted"
+            };
+
+            _logger.LogInformation("Sending message to Service Bus via SDK...");
+            await _sender.SendMessageAsync(message);
+            _logger.LogInformation("Message sent to Service Bus: {FeedbackId}", feedbackId);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Could not send to Service Bus (this is OK for local dev)");
+            _logger.LogError(ex, "Failed to send message to Service Bus");
+            throw;
         }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _sender.DisposeAsync();
+        await _client.DisposeAsync();
     }
 }

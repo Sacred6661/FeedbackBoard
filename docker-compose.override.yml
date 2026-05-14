@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   miniblue:
     # redis for cache
@@ -38,7 +36,6 @@ services:
     networks:
       - azure-local
 
-  # SQL Server for Azure SQL еemulation
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: sqlserver-dev
@@ -50,5 +47,37 @@ services:
     networks:
       - azure-local
 
+  servicebus-emulator:
+    image: mcr.microsoft.com/azure-messaging/servicebus-emulator:latest
+    container_name: servicebus-emulator
+    depends_on:
+      - sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      - SQL_SERVER=sqlserver
+      - MSSQL_SA_PASSWORD=YourStrong!Passw0rd
+      - CONFIG_PATH=/ServiceBus_Emulator/ConfigFiles/Config.json
+    ports:
+      - "5672:5672"
+      - "9350:9350"
+    volumes:
+      - ./servicebus-config.json:/ServiceBus_Emulator/ConfigFiles/Config.json
+    networks:
+      - azure-local
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: azurite
+    command: "azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0"
+    ports:
+      - "10000:10000" # Blob
+      - "10001:10001" # Queue
+      - "10002:10002" # Table
+    volumes:
+      - azurite_data:/data
+    networks:
+      - azure-local
+
 volumes:
   cosmosdb_data:
+  azurite_data:
