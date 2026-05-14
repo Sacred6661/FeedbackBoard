@@ -1,0 +1,45 @@
+version: "3.8"
+
+services:
+  # Main emulator Azure - 14+ diffenrent services
+  miniblue:
+    image: moabukar/miniblue:latest
+    container_name: miniblue
+    ports:
+      - "4566:4566" # Main Api API (Storage, Cosmos DB, Service Bus etc.)
+      - "4567:4567" # IMDS endpoint for Managed Identity
+    volumes:
+      # saving data during restart
+      - miniblue_data:/var/lib/miniblue
+    environment:
+      # Optional
+      - PERSIST=1
+    networks:
+      - azure-local
+    healthcheck:
+      # right healthcheck for miniblue
+      test:
+        [
+          "CMD-SHELL",
+          "curl -s http://localhost:4566/subscriptions?api-version=2022-09-01 || exit 1",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis-dev
+    ports:
+      - "6379:6379"
+    networks:
+      - azure-local
+
+volumes:
+  miniblue_data:
+    driver: local
+
+networks:
+  azure-local:
+    driver: bridge

@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="src/FeedbackBoard.Api/FeedbackBoard.Api.csproj" Id="09bbe361-8ce5-4359-9b59-0d07545ec1c5" />
+  <Project Path="src/FeedbackBoard.Core/FeedbackBoard.Core.csproj" Id="ab523d7c-4725-45cd-98da-ddfeb0d58f66" />
+  <Project Path="src/FeedbackBoard.Functions/FeedbackBoard.Functions.csproj" Id="413e8863-31fd-4719-81f0-b5ae68da7956" />
+</Solution>
