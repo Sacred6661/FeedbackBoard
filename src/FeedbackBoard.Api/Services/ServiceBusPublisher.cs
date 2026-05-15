@@ -17,7 +17,7 @@ public class ServiceBusPublisher : IServiceBusPublisher, IAsyncDisposable
 
         var connectionString = configuration["FeedbackBoard:ServiceBus:ConnectionString"]
             ?? configuration.GetConnectionString("ServiceBus")
-            ?? throw new InvalidOperationException("Service Bus connection string not found");
+            ?? throw new InvalidOperationException("Service Bus connection string not found in Key Vault or appsettings");
 
         var queueName = configuration["ServiceBus:Queues:FeedbackSubmitted"] ?? "feedback-submitted";
 
@@ -29,37 +29,47 @@ public class ServiceBusPublisher : IServiceBusPublisher, IAsyncDisposable
         _client = new ServiceBusClient(connectionString, clientOptions);
         _sender = _client.CreateSender(queueName);
 
-        _logger.LogInformation("Service Bus SDK publisher initialized for queue: {Queue}", queueName);
+        var source = configuration["FeedbackBoard:ServiceBus:ConnectionString"] != null
+            ? "Key Vault"
+            : "appsettings.json (fallback)";
+
+        _logger.LogInformation("Service Bus publisher initialized. Queue: {Queue}, Source: {Source}", queueName, source);
     }
 
-    public async Task PublishFeedbackSubmittedAsync(string feedbackId, string title, string categoryId, string userId)
+    public async Task PublishAsync(FeedbackCreatedEvent eventData)
+    {
+        await SendMessageAsync(eventData, eventData.FeedbackId, "FeedbackCreated");
+    }
+
+    public async Task PublishAsync(StatusChangedEvent eventData)
+    {
+        await SendMessageAsync(eventData, eventData.FeedbackId, "StatusChanged");
+    }
+
+    public async Task PublishAsync(FeedbackVotedEvent eventData)
+    {
+        await SendMessageAsync(eventData, eventData.FeedbackId, "FeedbackVoted");
+    }
+
+    private async Task SendMessageAsync<T>(T eventData, string messageId, string subject)
     {
         try
         {
-            var eventData = new FeedbackSubmittedEvent
-            {
-                FeedbackId = feedbackId,
-                Title = title,
-                CategoryId = categoryId,
-                UserId = userId,
-                SubmittedAt = DateTime.UtcNow
-            };
-
             var json = JsonConvert.SerializeObject(eventData);
             var message = new ServiceBusMessage(json)
             {
-                MessageId = feedbackId,
+                MessageId = messageId,
                 ContentType = "application/json",
-                Subject = "FeedbackSubmitted"
+                Subject = subject
             };
 
-            _logger.LogInformation("Sending message to Service Bus via SDK...");
             await _sender.SendMessageAsync(message);
-            _logger.LogInformation("Message sent to Service Bus: {FeedbackId}", feedbackId);
+
+            _logger.LogInformation("Published {Subject} event for {MessageId}", subject, messageId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send message to Service Bus");
+            _logger.LogError(ex, "Failed to publish {Subject} event for {MessageId}", subject, messageId);
             throw;
         }
     }

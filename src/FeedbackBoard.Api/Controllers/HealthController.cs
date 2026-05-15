@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using FeedbackBoard.Api.Services.Interfaces;
+using Microsoft.AspNetCore.Mvc;
 
 namespace FeedbackBoard.Api.Controllers;
 
@@ -8,11 +9,14 @@ public class HealthController : ControllerBase
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
+    private readonly IFeedbackMetadataService _metadata;
 
-    public HealthController(IHttpClientFactory httpClientFactory, IConfiguration configuration)
+    public HealthController(IHttpClientFactory httpClientFactory, IConfiguration configuration, 
+        IFeedbackMetadataService metadata)
     {
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
+        _metadata = metadata;
     }
 
     [HttpGet]
@@ -37,6 +41,17 @@ public class HealthController : ControllerBase
         // 4. сheck functions
         results["azure-functions"] = await CheckUrl(client, functionUrlHealt);
 
+        // Check SQL
+        try
+        {
+            var statuses = await _metadata.GetStatusesAsync();
+            results["sql-server"] = statuses.Count > 0 ? "OK" : "EMPTY";
+        }
+        catch
+        {
+            results["sql-server"] = "UNREACHABLE";
+        }
+
         // Configuration source
         var storageConn = _configuration["FeedbackBoard:Storage:ConnectionString"];
         var fallback = _configuration["ConnectionStrings:Storage"];
@@ -59,7 +74,7 @@ public class HealthController : ControllerBase
     {
         try
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             var response = await client.GetAsync(url, cts.Token);
             return response.IsSuccessStatusCode ? "OK" : $"HTTP {(int)response.StatusCode}";
         }

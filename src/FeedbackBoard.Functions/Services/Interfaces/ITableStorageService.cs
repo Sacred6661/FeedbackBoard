@@ -1,4 +1,4 @@
-﻿using FeedbackBoard.Core.Models;
+﻿using FeedbackBoard.Core.Entities;
 
 namespace FeedbackBoard.Functions.Services.Interfaces;
 

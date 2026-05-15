@@ -1,6 +1,10 @@
-﻿namespace FeedbackBoard.Api.Services.Interfaces;
+﻿using FeedbackBoard.Core.Events;
+
+namespace FeedbackBoard.Api.Services.Interfaces;
 
 public interface IServiceBusPublisher
 {
-    Task PublishFeedbackSubmittedAsync(string feedbackId, string title, string categoryId, string userId);
+    Task PublishAsync(FeedbackCreatedEvent eventData);
+    Task PublishAsync(StatusChangedEvent eventData);
+    Task PublishAsync(FeedbackVotedEvent eventData);
 }

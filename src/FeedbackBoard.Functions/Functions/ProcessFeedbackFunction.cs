@@ -1,4 +1,5 @@
-﻿using FeedbackBoard.Core.Events;
+﻿using FeedbackBoard.Core.Entities;
+using FeedbackBoard.Core.Events;
 using FeedbackBoard.Core.Models;
 using FeedbackBoard.Functions.Services.Interfaces;
 using Microsoft.Azure.Functions.Worker;

@@ -2,7 +2,7 @@
 using Azure.Data.Tables;
 using Newtonsoft.Json;
 
-namespace FeedbackBoard.Core.Models;
+namespace FeedbackBoard.Core.Entities;
 
 public class AuditLog : ITableEntity
 {

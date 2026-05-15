@@ -1,5 +1,5 @@
 ﻿using Azure.Data.Tables;
-using FeedbackBoard.Core.Models;
+using FeedbackBoard.Core.Entities;
 using FeedbackBoard.Functions.Services.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;

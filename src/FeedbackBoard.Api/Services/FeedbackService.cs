@@ -1,64 +1,143 @@
 ﻿using FeedbackBoard.Api.Services.Interfaces;
+using FeedbackBoard.Core.Entities;
+using FeedbackBoard.Core.Events;
 using FeedbackBoard.Core.Models;
+using Mapster;
 
 namespace FeedbackBoard.Api.Services;
 
-public class FeedbackService : IFeedbackService
+public class FeedbackService(ICosmosDbService cosmosDb, IServiceBusPublisher serviceBus, IFeedbackMetadataService metadata,
+    ILogger<FeedbackService> logger) : IFeedbackService
 {
-    private readonly ICosmosDbService _cosmosDb;
-    private readonly IServiceBusPublisher _serviceBus;
-    private readonly ILogger<FeedbackService> _logger;
-
-    public FeedbackService(
-        ICosmosDbService cosmosDb,
-        IServiceBusPublisher serviceBus,
-        ILogger<FeedbackService> logger)
-    {
-        _cosmosDb = cosmosDb;
-        _serviceBus = serviceBus;
-        _logger = logger;
-    }
-
     public async Task<FeedbackResponse> CreateFeedbackAsync(CreateFeedbackRequest request)
     {
-        var feedback = new Feedback
+        var feedback = request.Adapt<Feedback>();
+        feedback.Id = Guid.NewGuid().ToString();
+        feedback.Status = FeedbackStatusEnum.New;
+        feedback.StatusHistory = new List<StatusChange>
         {
-            Id = Guid.NewGuid().ToString(),
-            Title = request.Title,
-            Description = request.Description,
-            CategoryId = request.CategoryId,
-            UserId = request.UserId,
-            Status = FeedbackStatusEnum.New,
-            CreatedAt = DateTime.UtcNow
+            new() { OldStatus = FeedbackStatusEnum.New, NewStatus = FeedbackStatusEnum.New, ChangedBy = request.UserId }
         };
+        feedback.CreatedAt = DateTime.UtcNow;
 
-        // 1. Save to Cosmos DB
-        var created = await _cosmosDb.CreateFeedbackAsync(feedback);
-        _logger.LogInformation("Feedback saved to Cosmos DB: {Id}", created?.Id);
+        await cosmosDb.CreateFeedbackAsync(feedback);
 
-        // 2. Sending a message to Service Bus
-        _logger.LogInformation("Attempting to send to Service Bus queue: {Queue}", "feedback-submitted");
-        await _serviceBus.PublishFeedbackSubmittedAsync(
-            created.Id,
-            created.Title,
-            created.CategoryId,
-            created.UserId);
-        _logger.LogInformation("Successfully sent to Service Bus");
-
-        _logger.LogInformation("Feedback event published to Service Bus: {Id}", created.Id);
-
-        return new FeedbackResponse
+        await serviceBus.PublishAsync(new FeedbackCreatedEvent
         {
-            Id = created.Id,
-            Title = created.Title,
-            Status = created.Status.ToString(),
-            CreatedAt = created.CreatedAt,
-            Message = "Feedback submitted successfully"
-        };
+            FeedbackId = feedback.Id,
+            Title = feedback.Title,
+            Description = feedback.Description,
+            UserId = feedback.UserId,
+            CreatedAt = feedback.CreatedAt
+        });
+
+        logger.LogInformation("Feedback created and event published: {Id}", feedback.Id);
+        return await MapToResponseAsync(feedback);
     }
 
-    public async Task<Feedback?> GetFeedbackAsync(string id)
+    public async Task<FeedbackResponse> ChangeStatusAsync(string feedbackId, FeedbackStatusEnum newStatus, string changedBy, string? reason = null)
     {
-        return await _cosmosDb.GetFeedbackAsync(id);
+        var feedback = await cosmosDb.GetFeedbackAsync(feedbackId);
+        if (feedback == null) throw new InvalidOperationException("Feedback not found");
+
+        var oldStatus = feedback.Status;
+        feedback.StatusHistory.Add(new StatusChange
+        {
+            OldStatus = oldStatus,
+            NewStatus = newStatus,
+            ChangedBy = changedBy,
+            Reason = reason,
+            Timestamp = DateTime.UtcNow
+        });
+
+        feedback.Status = newStatus;
+        feedback.UpdatedAt = DateTime.UtcNow;
+        if (newStatus == FeedbackStatusEnum.Completed) feedback.CompletedAt = DateTime.UtcNow;
+
+        await cosmosDb.UpdateFeedbackAsync(feedback);
+
+        await serviceBus.PublishAsync(new StatusChangedEvent
+        {
+            FeedbackId = feedback.Id,
+            OldStatus = oldStatus,
+            NewStatus = newStatus,
+            ChangedBy = changedBy,
+            Reason = reason
+        });
+
+        logger.LogInformation("Feedback status changed: {Id} {OldStatus} → {NewStatus}", feedback.Id, oldStatus, newStatus);
+        return await MapToResponseAsync(feedback);
+    }
+
+    public async Task<FeedbackResponse> VoteAsync(string feedbackId, string userId)
+    {
+        var feedback = await cosmosDb.GetFeedbackAsync(feedbackId);
+        if (feedback == null) throw new InvalidOperationException("Feedback not found");
+
+        if (!feedback.VoterIds.Contains(userId))
+        {
+            feedback.VoterIds.Add(userId);
+            feedback.VoteCount = feedback.VoterIds.Count;
+            await cosmosDb.UpdateFeedbackAsync(feedback);
+
+            await serviceBus.PublishAsync(new FeedbackVotedEvent
+            {
+                FeedbackId = feedbackId,
+                UserId = userId,
+                NewVoteCount = feedback.VoteCount
+            });
+        }
+
+        return await MapToResponseAsync(feedback);
+    }
+
+    public async Task<FeedbackResponse?> GetFeedbackAsync(string id)
+    {
+        var feedback = await cosmosDb.GetFeedbackAsync(id);
+        return feedback == null ? null : await MapToResponseAsync(feedback);
+    }
+
+    public async Task<List<FeedbackResponse>> GetFeedbacksByCategoryAsync(int categoryId)
+    {
+        var feedbacks = await cosmosDb.GetFeedbacksByCategoryAsync(categoryId);
+        var responses = new List<FeedbackResponse>();
+        foreach (var feedback in feedbacks)
+        {
+            responses.Add(await MapToResponseAsync(feedback));
+        }
+        return responses;
+    }
+
+    public async Task<List<FeedbackResponse>> GetFeedbacksByStatusAsync(FeedbackStatusEnum status)
+    {
+        var feedbacks = await cosmosDb.GetFeedbacksByStatusAsync(status);
+        var responses = new List<FeedbackResponse>();
+        foreach (var feedback in feedbacks)
+        {
+            responses.Add(await MapToResponseAsync(feedback));
+        }
+        return responses;
+    }
+
+    private async Task<FeedbackResponse> MapToResponseAsync(Feedback feedback)
+    {
+        var response = feedback.Adapt<FeedbackResponse>();
+
+        response.StatusInfo = await metadata.GetStatusInfo(feedback);
+
+        var category = await metadata.GetCategoryAsync(feedback.CategoryId);
+        if (category != null)
+        {
+            response.CategoryName = category.DisplayName;
+            response.CategoryIcon = category.Icon;
+        }
+
+        if (feedback.AiAnalysis?.SuggestedCategoryId != null)
+        {
+            var suggestedCategory = await metadata.GetCategoryAsync(feedback.AiAnalysis.SuggestedCategoryId.Value);
+            response.SuggestedCategoryName = suggestedCategory?.DisplayName;
+        }
+
+        return response;
     }
 }

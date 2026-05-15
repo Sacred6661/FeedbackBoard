@@ -149,6 +149,7 @@ $kvSecrets = @(
     @{name="FeedbackBoard--CosmosDb--ConnectionString"; value="AccountEndpoint=https://localhost:8081;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;"},
     @{name="FeedbackBoard--ServiceBus--ConnectionString"; value="Endpoint=sb://localhost:5672;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=RootManageSharedAccessKey;UseDevelopmentEmulator=true;"},
     @{name="FeedbackBoard--Storage--ConnectionString"; value="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://localhost:10000/devstoreaccount1;TableEndpoint=http://localhost:10002/devstoreaccount1;"},
+    @{name="FeedbackBoard--SqlServer--ConnectionString"; value="Server=localhost,1433;Database=FeedbackBoard;User Id=sa;Password=YourStrong!Passw0rd;TrustServerCertificate=true;"},
     @{name="FeedbackBoard--Redis--ConnectionString"; value="localhost:6379"}
 )
 

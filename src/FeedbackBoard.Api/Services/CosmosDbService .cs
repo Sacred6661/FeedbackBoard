@@ -1,7 +1,8 @@
 ﻿using Azure;
 using FeedbackBoard.Api.Services.Interfaces;
-using FeedbackBoard.Core.Models;
+using FeedbackBoard.Core.Entities;
 using Microsoft.Azure.Cosmos;
+using Microsoft.Azure.Cosmos.Linq;
 
 namespace FeedbackBoard.Api.Services;
 
@@ -42,6 +43,7 @@ public class CosmosDbService : ICosmosDbService
         _logger.LogInformation("Cosmos DB client created. Source: {Source}", source);
     }
 
+    // Lazy loading for container
     private async Task<Container> GetContainerAsync()
     {
         if (_initialized && _container != null)
@@ -80,22 +82,22 @@ public class CosmosDbService : ICosmosDbService
         return _container;
     }
 
-    public async Task<Feedback?> CreateFeedbackAsync(Feedback feedback)
+    public async Task<Feedback> CreateFeedbackAsync(Feedback feedback)
     {
+        var container = await GetContainerAsync();
+
         try
         {
-            var container = await GetContainerAsync();
             var response = await container.CreateItemAsync(
-            feedback,
-            new PartitionKey(feedback.CategoryId));
+                feedback,
+                new PartitionKey(feedback.CategoryId));
 
-            _logger.LogInformation("Feedback created: {Id}", feedback.Id);
+            _logger.LogInformation("Feedback created in Cosmos DB: {Id}", feedback.Id);
             return response.Resource;
-
         }
-        catch(Exception ex)
+        catch (CosmosException ex)
         {
-            _logger.LogError("Error: {ex}", ex);
+            _logger.LogError(ex, "Error creating feedback {Id}", feedback.Id);
             return null;
         }
     }
@@ -115,8 +117,7 @@ public class CosmosDbService : ICosmosDbService
             {
                 var response = await iterator.ReadNextAsync();
                 var feedback = response.FirstOrDefault();
-                if (feedback != null)
-                    return feedback;
+                if (feedback != null) return feedback;
             }
 
             return null;
@@ -128,30 +129,54 @@ public class CosmosDbService : ICosmosDbService
         }
     }
 
-    public async Task<List<Feedback>> GetFeedbacksByCategoryAsync(string categoryId)
+    public async Task<Feedback> UpdateFeedbackAsync(Feedback feedback)
     {
         var container = await GetContainerAsync();
 
-        try
+        var response = await container.ReplaceItemAsync(
+            feedback,
+            feedback.Id,
+            new PartitionKey(feedback.CategoryId));
+
+        _logger.LogInformation("Feedback updated in Cosmos DB: {Id}", feedback.Id);
+        return response.Resource;
+    }
+
+    public async Task<List<Feedback>> GetFeedbacksByCategoryAsync(int categoryId)
+    {
+        var container = await GetContainerAsync();
+
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.categoryId = @categoryId")
+            .WithParameter("@categoryId", categoryId);
+
+        var iterator = container.GetItemQueryIterator<Feedback>(query);
+        var results = new List<Feedback>();
+
+        while (iterator.HasMoreResults)
         {
-            var query = new QueryDefinition("SELECT * FROM c WHERE c.categoryId = @categoryId")
-                .WithParameter("@categoryId", categoryId);
-
-            var iterator = container.GetItemQueryIterator<Feedback>(query);
-            var results = new List<Feedback>();
-
-            while (iterator.HasMoreResults)
-            {
-                var response = await iterator.ReadNextAsync();
-                results.AddRange(response);
-            }
-
-            return results;
+            var response = await iterator.ReadNextAsync();
+            results.AddRange(response);
         }
-        catch (CosmosException ex)
+
+        return results;
+    }
+
+    public async Task<List<Feedback>> GetFeedbacksByStatusAsync(FeedbackStatusEnum status)
+    {
+        var container = await GetContainerAsync();
+
+        var iterator = container.GetItemLinqQueryable<Feedback>()
+            .Where(f => f.Status == status)
+            .ToFeedIterator();
+
+        var results = new List<Feedback>();
+
+        while (iterator.HasMoreResults)
         {
-            _logger.LogError(ex, "Error getting feedbacks for category {CategoryId}", categoryId);
-            return new List<Feedback>();
+            var response = await iterator.ReadNextAsync();
+            results.AddRange(response);
         }
+
+        return results;
     }
 }

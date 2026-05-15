@@ -6,13 +6,9 @@ using System.Threading.Tasks;
 
 namespace FeedbackBoard.Core.Models
 {
-    public enum FeedbackStatusEnum
+    public class SentimentResult
     {
-        New,
-        UnderReview,
-        Planned,
-        InProgress,
-        Completed,
-        Declined
+        public string Sentiment { get; set; } = "Neutral";
+        public double Confidence { get; set; }
     }
 }

@@ -10,7 +10,8 @@ namespace FeedbackBoard.Core.Models
     {
         public string Title { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
-        public string CategoryId { get; set; } = string.Empty;
+        public int CategoryId { get; set; }
         public string UserId { get; set; } = string.Empty;
+        public string AuthorName { get; set; } = string.Empty;
     }
 }
