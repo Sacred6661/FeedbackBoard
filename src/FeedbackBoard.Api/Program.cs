@@ -1,5 +1,6 @@
 using FeedbackBoard.Api.Configuration;
 using FeedbackBoard.Api.Data;
+using FeedbackBoard.Api.Hubs;
 using FeedbackBoard.Api.Services;
 using FeedbackBoard.Api.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -34,6 +35,19 @@ builder.Services.AddHttpClient("miniblue", client =>
     client.Timeout = TimeSpan.FromSeconds(5);
 });
 
+var frontendUrl = builder.Configuration["FrontendUrl"];
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins(frontendUrl)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
+});
+
 // services refistrations
 builder.Services.AddSingleton<ICosmosDbService, CosmosDbService>();
 builder.Services.AddSingleton<IServiceBusPublisher, ServiceBusPublisher>();
@@ -43,6 +57,8 @@ builder.Services.AddScoped<IFeedbackMetadataService, FeedbackMetadataService>();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+builder.Services.AddSignalR();
 
 var app = builder.Build();
 
@@ -60,7 +76,12 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseCors("AllowFrontend");
+
 app.UseAuthorization();
 app.MapControllers();
+
+app.MapHub<FeedbackHub>("/hubs/feedback");
 
 app.Run();

@@ -1,13 +1,15 @@
-﻿using FeedbackBoard.Api.Services.Interfaces;
+﻿using FeedbackBoard.Api.Hubs;
+using FeedbackBoard.Api.Services.Interfaces;
 using FeedbackBoard.Core.Entities;
 using FeedbackBoard.Core.Events;
 using FeedbackBoard.Core.Models;
 using Mapster;
+using Microsoft.AspNetCore.SignalR;
 
 namespace FeedbackBoard.Api.Services;
 
 public class FeedbackService(ICosmosDbService cosmosDb, IServiceBusPublisher serviceBus, IFeedbackMetadataService metadata,
-    ILogger<FeedbackService> logger) : IFeedbackService
+    IHubContext<FeedbackHub> feedbackHub, ILogger<FeedbackService> logger) : IFeedbackService
 {
     public async Task<FeedbackResponse> CreateFeedbackAsync(CreateFeedbackRequest request)
     {
@@ -65,8 +67,17 @@ public class FeedbackService(ICosmosDbService cosmosDb, IServiceBusPublisher ser
             Reason = reason
         });
 
+        var response = await MapToResponseAsync(feedback);
+
+        // signalR sending 
+        await feedbackHub.Clients.Group("FeedbackWatchers").SendAsync("StatusChanged", new
+        {
+            feedbackId,
+            status = response.StatusInfo
+        });
+
         logger.LogInformation("Feedback status changed: {Id} {OldStatus} → {NewStatus}", feedback.Id, oldStatus, newStatus);
-        return await MapToResponseAsync(feedback);
+        return response;
     }
 
     public async Task<FeedbackResponse> VoteAsync(string feedbackId, string userId)
@@ -87,6 +98,15 @@ public class FeedbackService(ICosmosDbService cosmosDb, IServiceBusPublisher ser
                 NewVoteCount = feedback.VoteCount
             });
         }
+
+        var response = MapToResponseAsync(feedback);
+
+        await feedbackHub.Clients.Group("FeedbackWatchers").SendAsync("VoteUpdated", new
+        {
+            feedbackId,
+            voteCount = feedback.VoteCount,
+            hasVoted = true
+        });
 
         return await MapToResponseAsync(feedback);
     }
